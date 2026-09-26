@@ -36,7 +36,9 @@ def create_world(loader, tile_map, chunk_manager):
     chest_id = loader.spawn_entity("chest", 52, 49)
     chunk_manager.add_entity(chest_id, 52, 48)
 
+
 saved_chunk_data = {}
+
 
 def main():
     pygame.init()
