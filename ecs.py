@@ -81,14 +81,13 @@ class UIManager:
 
 
 class TileMap:
-    def __init__(self, cols=100, rows=100, tile_defs=None):
-        self.cols = cols
-        self.rows = rows
+    def __init__(self, world_generator, tile_defs=None):
+        self.world_gen = world_generator
+        self.chunk_size = world_generator.chunk_size
         self.tile_defs = tile_defs or {}
-        self.grid = [[0 for _ in range(cols)] for _ in range(rows)]
-        self.variants = [
-            [self._choose_variant(0) for _ in range(cols)] for _ in range(rows)
-        ]
+
+        # Store chunks dynamically: {(cx, cy): {"grid": [...], "variants": [...]}}
+        self.chunks = {}
 
     def _choose_variant(self, tile_type):
         tile_def = self.tile_defs.get(tile_type, {})
@@ -98,30 +97,39 @@ class TileMap:
         weights = [variant.get("weight", 1) for variant in variants]
         return random.choices(range(len(variants)), weights=weights, k=1)[0]
 
+    def load_chunk(self, cx, cy):
+        """Generates and caches a chunk if it doesn't exist."""
+        if (cx, cy) not in self.chunks:
+            grid = self.world_gen.generate_chunk(cx, cy)
+            variants = [
+                [self._choose_variant(tile_id) for tile_id in row] for row in grid
+            ]
+            self.chunks[(cx, cy)] = {"grid": grid, "variants": variants}
+
+    def _get_local_coords(self, x, y):
+        cx, cy = x // self.chunk_size, y // self.chunk_size
+        lx, ly = x % self.chunk_size, y % self.chunk_size
+        self.load_chunk(cx, cy)  # Ensure it exists
+        return cx, cy, lx, ly
+
     def get_tile_id(self, x, y):
-        if 0 <= x < self.cols and 0 <= y < self.rows:
-            return self.grid[y][x]
-        return None
+        cx, cy, lx, ly = self._get_local_coords(x, y)
+        return self.chunks[(cx, cy)]["grid"][ly][lx]
 
     def get_tile_variant(self, x, y):
-        if 0 <= x < self.cols and 0 <= y < self.rows:
-            return self.variants[y][x]
-        return None
+        cx, cy, lx, ly = self._get_local_coords(x, y)
+        return self.chunks[(cx, cy)]["variants"][ly][lx]
 
     def get_tile_def(self, x, y):
         tid = self.get_tile_id(x, y)
-        if tid is not None:
-            return self.tile_defs.get(tid)
-        return None
+        return self.tile_defs.get(tid)
 
     def set_tile(self, x, y, tile_type):
-        if 0 <= x < self.cols and 0 <= y < self.rows:
-            self.grid[y][x] = tile_type
-            self.variants[y][x] = self._choose_variant(tile_type)
+        cx, cy, lx, ly = self._get_local_coords(x, y)
+        self.chunks[(cx, cy)]["grid"][ly][lx] = tile_type
+        self.chunks[(cx, cy)]["variants"][ly][lx] = self._choose_variant(tile_type)
 
     def is_blocked(self, x, y):
-        if not (0 <= x < self.cols and 0 <= y < self.rows):
-            return True
         t_def = self.get_tile_def(x, y)
         if t_def is not None:
             return t_def.get("blocked", False)
@@ -265,10 +273,10 @@ class RenderSystem(esper.Processor):
         offset_x = int(self.cam_x)
         offset_y = int(self.cam_y)
 
-        start_col = max(0, offset_x // self.CELL_SIZE)
-        end_col = min(self.tile_map.cols, (offset_x + MAP_WIDTH) // self.CELL_SIZE + 2)
-        start_row = max(0, offset_y // self.CELL_SIZE)
-        end_row = min(self.tile_map.rows, (offset_y + MAP_HEIGHT) // self.CELL_SIZE + 2)
+        start_col = offset_x // self.CELL_SIZE - 1
+        end_col = (offset_x + MAP_WIDTH) // self.CELL_SIZE + 2
+        start_row = offset_y // self.CELL_SIZE - 1
+        end_row = (offset_y + MAP_HEIGHT) // self.CELL_SIZE + 2
 
         for ty in range(start_row, end_row):
             for tx in range(start_col, end_col):

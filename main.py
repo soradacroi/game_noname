@@ -15,32 +15,26 @@ from systems.interaction import InteractionManager
 from mod_loader import ModLoader
 from systems.detection import perform_detection
 from systems.movement import player_movement
+from systems.world_gen import WorldGenerator
 import random
 
-random.seed(47)
 
 debug = "d" in sys.argv
-
-
-def create_world(loader, tile_map, chunk_manager):
-    for x in range(tile_map.cols):
-        tile_map.set_tile(x, 0, 1)
-        tile_map.set_tile(x, tile_map.rows - 1, 1)
-    for y in range(tile_map.rows):
-        tile_map.set_tile(0, y, 1)
-        tile_map.set_tile(tile_map.cols - 1, y, 1)
-
-    tile_map.set_tile(54, 50, 1)
-    goblin_id = loader.spawn_entity("goblin", 52, 50)
-    chunk_manager.add_entity(goblin_id, 52, 50)
-    chest_id = loader.spawn_entity("chest", 52, 49)
-    chunk_manager.add_entity(chest_id, 52, 48)
-
+send_seed = 0
+if "s" in sys.argv:
+    try:
+        s_index = sys.argv.index("s")
+        send_seed = int(sys.argv[s_index + 1])
+    except (ValueError, IndexError):
+        send_seed = 0
 
 saved_chunk_data = {}
 
 
 def main():
+    seed = send_seed
+    random.seed(seed)
+
     pygame.init()
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     clock = pygame.time.Clock()
@@ -48,7 +42,9 @@ def main():
     loader = ModLoader()
     loader.load_mods()
 
-    tile_map = TileMap(100, 100, tile_defs=loader.tile_defs)
+    world_gen = WorldGenerator(seed=seed, chunk_size=16)
+
+    tile_map = TileMap(world_generator=world_gen, tile_defs=loader.tile_defs)
     chunk_manager = ChunkManager(chunk_size=16)
     spatial_hash = {}
     ui = UIManager()
@@ -57,8 +53,11 @@ def main():
     render_sys = RenderSystem(screen, ui, tile_map)
     esper.add_processor(render_sys, priority=1)
 
-    create_world(loader, tile_map, chunk_manager)
     player = loader.spawn_entity("player", 50, 50)
+    goblin_id = loader.spawn_entity("goblin", 52, 50)
+    chunk_manager.add_entity(goblin_id, 52, 50)
+    chest_id = loader.spawn_entity("chest", 52, 49)
+    chunk_manager.add_entity(chest_id, 52, 49)
 
     interaction_mode = False
     pending_interaction_target = None
@@ -69,6 +68,7 @@ def main():
 
     perform_detection(50, 50, player, spatial_hash, tile_map, ui)
 
+    steps = 1
     running = True
     MOVE_DELAY = 150
     last_move = 0
@@ -76,7 +76,7 @@ def main():
 
     valid_keys = (pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d)
     if debug:
-        valid_keys += (pygame.K_j, pygame.K_k)
+        valid_keys += (pygame.K_j, pygame.K_k, pygame.K_1, pygame.K_0)
 
     while running:
         dx, dy = 0, 0
@@ -127,19 +127,23 @@ def main():
             key = pressed_keys[-1]
 
             if key == pygame.K_w:
-                dy = -1
+                dy = -steps
             elif key == pygame.K_s:
-                dy = 1
+                dy = steps
             elif key == pygame.K_a:
-                dx = -1
+                dx = -steps
             elif key == pygame.K_d:
-                dx = 1
+                dx = steps
 
             # debug stuff
             elif debug and key == pygame.K_j:
                 render_sys.set_cell_size(render_sys.CELL_SIZE - 1)
             elif debug and key == pygame.K_k:
                 render_sys.set_cell_size(render_sys.CELL_SIZE + 1)
+            elif debug and key == pygame.K_0:
+                steps -= 1
+            elif debug and key == pygame.K_1:
+                steps += 1
 
             if dx != 0 or dy != 0:
                 if interaction_mode:

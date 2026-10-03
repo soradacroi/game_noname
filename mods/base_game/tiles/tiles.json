@@ -1,5 +1,5 @@
 {
-  "0": {
+  "2": {
     "name": "Grass",
     "tileset": "assets/grass_tile.png",
     "tile_size": 32,
@@ -34,6 +34,20 @@
     "image": "assets/wall.png",
     "blocked": true,
     "detect_below": false,
+    "detect_horizontal": true
+  },
+  "0": {
+    "name": "water",
+    "image": "assets/water.png",
+    "blocked": false,
+    "detect_below": true,
+    "detect_horizontal": true
+  },
+  "3": {
+    "name": "sand",
+    "image": "assets/sand.png",
+    "blocked": false,
+    "detect_below": true,
     "detect_horizontal": true
   }
 }
